@@ -37,7 +37,7 @@ def send_email(subject,text=''):
 def get_connection_mml(client,database):
     try:
         reader = configparser.RawConfigParser()
-        reader.read('{}/bcl_user.cnf'.format(os.path.dirname(os.path.realpath(__file__))))
+        reader.read('/home/mml2204/.my.cnf')
         db = 'client' + client
         db_host = reader.get(db, 'host')
         db_user = reader.get(db, 'user')
