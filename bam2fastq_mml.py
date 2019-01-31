@@ -18,6 +18,7 @@ POSITION ARGUMENT OPTIONS:
 2) Revert
 3) SamToFastq
 4) Pigz
+5) Resume - means check line counts and pick up from point where line counts don't match
 """
 
 def main(chgvid,temp_folder,input_file,run,ref,samp_type,position):
@@ -37,7 +38,21 @@ def main(chgvid,temp_folder,input_file,run,ref,samp_type,position):
         print(cmd)
         if run:
             subprocess_exec(cmd)
-    
+   
+    #hack - clean later
+    if position == "Resume":
+        #try to find th ecorrect position        
+        if len(glob.glob("{0}/{1}/raw/{1}.fq*".format(temp_folder,chgvid))) != 0:
+            position = "Pigz"
+        elif os.path.exists("{0}/{1}.OQ.sam".format(temp_folder,chgvid)):
+            position = "SamToFastq"
+        elif os.path.exists("{0}/{1}_shuf.bam".format(temp_folder,chgvid)):
+            position = "Revert"
+        elif input_file[-5:] == "bam" or os.path.exists("{0}/{1}_cram2bam_op.bam".format(temp_folder,chgvid)):
+            position = "Shuffle"
+        else:
+            position = "Begin"
+
     ###STEP 0: Cram to bam
     if ref[-3:] == ".gz":
         #check if gzip instead of bgzip, convert to bgzip since samtools accepts only bgzip
@@ -153,7 +168,7 @@ def main(chgvid,temp_folder,input_file,run,ref,samp_type,position):
     if position == "Pigz":
         assert len(zip_fastqs) == 0, "zipped fastqs already exist for this sample: {}. delete them first".format(",".join(zip_fastqs))
     for fastq in fastqs:
-        pigz_cmd = """{0} -v -p 4 {1}""".format(temp_folder,fastq)
+        pigz_cmd = """{0} -v -p 4 {1} >>{2}/{3}_stdout 2>>{2}/{3}_stderr""".format(PIGZ,fastq,temp_folder,chgvid)
         print(pigz_cmd)
         if run and position == "Pigz":
             subprocess_exec(pigz_cmd)
@@ -168,8 +183,12 @@ def main(chgvid,temp_folder,input_file,run,ref,samp_type,position):
     if run:
         subprocess_exec(rmshuf_cmd)
         subprocess_exec(rmOQ_cmd)
+        if input_file[-5:] == ".cram":
+            #rm cram2bam output
+            rm_cram2bam = """rm -v {0}/{1}_cram2bam_op.bam""".format(temp_folder,chgvid)
+            print(rm_cram2bam)
+            subprocess_exec(rm_cram2bam)
 
-    
 if __name__ == "__main__":
    
     dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -181,7 +200,7 @@ if __name__ == "__main__":
     parser.add_argument("-r","--run",dest='run',action='store_true',default=False)
     parser.add_argument("-ref","--ref",dest='ref',default="/scratch/HS_Build37/BWA_INDEX_hs37d5/hs37d5.fa",required=False)
     parser.add_argument("-s","--sample_type",dest="samp_type",default="",required=True)
-    parser.add_argument("-p","--position",dest="position",default="Begin",required=False,choices=['Begin','Revert','SamToFastq','Shuffle','Pigz'])
+    parser.add_argument("-p","--position",dest="position",default="Begin",required=False,choices=['Begin','Revert','SamToFastq','Shuffle','Pigz','Resume'])
     args = parser.parse_args()
     setup_logging(dir_path+'/logs/','bam2fastq_'+args.chgvid)
     main(args.chgvid,args.temp_folder,args.input_bam,args.run,args.ref,args.samp_type,args.position)
